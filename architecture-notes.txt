@@ -1,0 +1,604 @@
+====================================================================
+CONTENT BROADCASTING SYSTEM - ARCHITECTURE NOTES
+Version 1.0.0
+====================================================================
+
+1. AUTHENTICATION & RBAC FLOW
+====================================================================
+
+Authentication Flow:
+- User provides email and password to /api/auth/login
+- AuthService validates credentials using bcrypt.compare()
+- If valid, generates JWT token with payload: { userId, email, role }
+- JWT is signed using config.jwt.secret (min 32 chars)
+- Token expiry: 24 hours
+- Client stores token and sends in Authorization header: "Bearer <token>"
+
+RBAC Implementation:
+- AuthMiddleware.verifyToken() extracts and decodes JWT
+- Decoded payload attached to req.user
+- RBACMiddleware.requireRole() checks req.user.role against allowed roles
+- Returns 403 Forbidden if role doesn't match
+- Separate endpoints for teacher and principal operations
+- Public endpoint (/api/content/live) requires no authentication
+
+Role Permissions:
+- Teacher: Upload content, view own content
+- Principal: View all content, approve/reject, view pending queue
+- Student (Public API): Read-only access to active content
+
+2. SUBJECT-BASED SYSTEM DESIGN
+====================================================================
+
+Content Organization:
+- Each piece of content belongs to a single subject (maths, science, etc.)
+- Subjects are freeform strings stored in database
+- No predefined subject list - teachers can create new subjects
+
+Rotation Scope:
+- Each subject has INDEPENDENT rotation cycles
+- Multiple subjects can have active content simultaneously
+- When calling /api/content/live/:teacherId, response contains one active 
+  item per subject (if available within time window)
+
+Subject Isolation:
+- Rotation calculations happen per-subject
+- One subject's cycle does not affect another's
+- Enables teachers to manage independent schedules per subject
+
+Example:
+- Maths: Content A (5 min) -> Content B (5 min) -> cycle repeats
+- Science: Content X (3 min) -> Content Y (2 min) -> cycle repeats
+- At any given time, both can be active simultaneously
+
+3. FILE UPLOAD APPROACH
+====================================================================
+
+Local Storage Strategy:
+- Files stored in /uploads directory in project root
+- Files served statically via /uploads/:filename endpoint
+- Database stores: file_path, file_type, file_size
+
+Upload Middleware (Multer):
+- Destination: /uploads
+- Filename: `${Date.now()}-${uuid()}.${ext}` (prevents collisions)
+- File filter: only jpg, png, gif allowed
+- Max size: 10MB (configurable via MAX_FILE_SIZE env var)
+
+Upload Service validates:
+- File exists
+- MIME type is in allowed list
+- File size doesn't exceed limit
+
+Upload Flow:
+1. POST /api/content/upload with multipart/form-data
+2. Multer saves file to /uploads with unique name
+3. UploadService validates file metadata
+4. ContentService creates database record with status='pending'
+5. Content awaits principal approval before broadcasting
+
+Database Metadata:
+- file_path: Full path for retrieval
+- file_type: MIME type for verification
+- file_size: For quota/analytics
+
+Considerations:
+- No file deletion - uploaded files are permanent (can extend with soft-delete)
+- Path traversal prevented by Multer configuration
+- Files accessible via HTTP for public streaming
+
+4. APPROVAL WORKFLOW DESIGN
+====================================================================
+
+Content Lifecycle:
+uploaded -> pending -> approved / rejected
+
+Status Definitions:
+- pending: Awaiting principal review
+- approved: Principal approved, becomes available for broadcasting
+- rejected: Principal rejected with reason, cannot be reused
+
+Approval Process:
+1. Teacher uploads content (status=pending automatically)
+2. Principal views /api/approval/pending to see pending content
+3. Principal calls /api/approval/approve/:contentId
+   - Sets: status='approved', approved_by=principalId, approved_at=NOW()
+4. OR Principal calls /api/approval/reject/:contentId
+   - Sets: status='rejected', rejection_reason=<provided reason>
+   - Reason is visible to teacher when viewing own content
+
+Constraints:
+- Only principal can approve/reject (enforced by RBAC middleware)
+- Only pending content can be approved/rejected (enforced at service level)
+- Rejection requires reason field (validates at controller level)
+- Cannot re-approve rejected content (would need to re-upload)
+
+Teacher Visibility:
+- Teachers see all their own content via /api/content/my-content
+- Includes status field so teachers see pending/approved/rejected states
+- Rejection reason visible on rejected content
+
+Principal Visibility:
+- /api/approval/pending shows only pending content
+- /api/approval/all shows all content across all teachers
+- Can filter by status in frontend if needed
+
+5. SCHEDULING/ROTATION LOGIC (CRITICAL)
+====================================================================
+
+The rotation algorithm is the most important component. It determines 
+which content is currently active based on time and rotation order.
+
+Algorithm Overview:
+
+  1. Query database for eligible content:
+     - WHERE uploaded_by = teacherId
+     - AND status = 'approved'
+     - AND start_time <= NOW()
+     - AND end_time >= NOW()
+
+  2. Group results by subject
+     
+  3. For each subject:
+     a. Sort by rotation_order (ascending)
+     
+     b. Calculate cycle duration:
+        Total minutes = SUM(rotation_duration for each content)
+        Example: 5min + 3min + 2min = 10min cycle
+     
+     c. Calculate reference time:
+        referenceTime = MIN(start_time) for this subject
+        This ensures consistent rotation across all time zones/restarts
+     
+     d. Calculate elapsed time:
+        elapsedMinutes = (NOW - referenceTime) / 60000
+     
+     e. Find position in current cycle:
+        positionInCycle = elapsedMinutes % cycleDuration
+     
+     f. Find active content by iterating:
+        accumulatedTime = 0
+        FOR each content in sorted order:
+          duration = content.rotation_duration (default 5)
+          IF positionInCycle >= accumulatedTime 
+             AND positionInCycle < accumulatedTime + duration:
+            RETURN this content
+          accumulatedTime += duration
+
+Example Walkthrough:
+
+Time Window: 10:00 - 18:00
+Maths Content (subject='maths'):
+- Content A: rotation_order=0, duration=5min
+- Content B: rotation_order=1, duration=3min  
+- Content C: rotation_order=2, duration=2min
+
+Cycle: A(5) -> B(3) -> C(2) -> cycle repeats every 10 minutes
+
+At 10:00: referenceTime = 10:00, elapsed = 0 min
+  positionInCycle = 0 % 10 = 0
+  A is active (0-5min) ✓
+
+At 10:07: elapsed = 7 min
+  positionInCycle = 7 % 10 = 7
+  A active? 7 in [0,5)? NO
+  B active? 7 in [5,8)? YES ✓
+
+At 10:23: elapsed = 23 min
+  positionInCycle = 23 % 10 = 3
+  A active? 3 in [0,5)? YES ✓
+
+Edge Cases Handled:
+
+1. No approved content within time window
+   -> Returns empty array
+   -> API responds: { success: true, content: [], message: "No content available" }
+
+2. Content approved but outside time window
+   -> Query excludes it (database filter)
+   -> Returns empty array
+
+3. Multiple subjects with different cycles
+   -> Processed independently
+   -> Response contains one item per subject
+   -> Each item has independent activeUntilMinutes calculation
+
+4. Single content item per subject
+   -> Cycle duration = its rotation_duration
+   -> Always returns that item (unless outside time window)
+
+5. Default rotation duration
+   -> If rotation_duration not specified: default = 5 minutes
+   -> Applied per content item
+
+Time Window Requirement:
+- Content MUST have start_time and end_time set
+- If either is NULL, content is ineligible for broadcast
+- Allows teachers to schedule when content goes live
+
+Rotation Order:
+- Primary sorting key for rotation sequence
+- Must be unique per subject (not enforced in DB, assumed by teachers)
+- Lower numbers appear first in rotation
+- Allows explicit teacher control over sequence
+
+Stateless Design:
+- No server-side state tracking which content is active
+- Pure time-based calculation
+- Can scale horizontally
+- Consistent across service restarts
+
+6. DATABASE DESIGN DECISIONS
+====================================================================
+
+Schema Simplification:
+
+Original Requirements:
+- Suggested: Content, ContentSlots, ContentSchedule tables
+- Our Implementation: Single Content table
+
+Rationale:
+1. Avoids JOINs: faster queries
+2. Simpler code: less complex service logic
+3. Easier scheduling: all timing info in one place
+4. Fewer consistency issues: no orphaned records
+
+Content Table Fields:
+
+Core Content Info:
+- id (UUID): Primary key, unique identifier
+- title (VARCHAR): Required, searchable
+- description (TEXT): Optional, additional context
+- subject (VARCHAR): Required, grouping for rotation
+
+File Information:
+- file_path (VARCHAR): Location on disk
+- file_type (VARCHAR): MIME type (image/jpeg, etc.)
+- file_size (INTEGER): For quota/analytics
+
+Access Control:
+- uploaded_by (UUID FK): Teacher who uploaded
+- approved_by (UUID FK nullable): Principal who approved
+- status (ENUM): pending/approved/rejected
+
+Approval Tracking:
+- status: Approval state
+- rejection_reason (TEXT nullable): Why rejected
+- approved_at (TIMESTAMP nullable): When approved
+
+Scheduling:
+- start_time (TIMESTAMP nullable): When content becomes available
+- end_time (TIMESTAMP nullable): When content stops being available
+- rotation_order (INTEGER): Sequence in rotation (0, 1, 2...)
+- rotation_duration (INTEGER): How many minutes before next item
+
+Audit:
+- created_at (TIMESTAMP): When uploaded
+- updated_at (TIMESTAMP): Last modification (auto-updated)
+
+Indexes:
+
+idx_content_teacher_subject_status (uploaded_by, subject, status)
+- Used by: GET /api/content/my-content (teacher)
+- Reason: Common query filtering by teacher and status
+
+idx_content_status_time_window (status, start_time, end_time)
+- Used by: Scheduler service (most critical query)
+- Reason: Main query for active content lookup
+
+idx_content_subject
+- Used by: Grouping in scheduler service
+- Reason: Secondary filter for subject-based queries
+
+idx_users_email
+- Used by: Login (auth service)
+- Reason: Fast user lookup by email
+
+Auto-Update Trigger:
+- updated_at refreshes automatically on UPDATE
+- Helps track when content was last modified
+- Useful for auditing
+
+Null Handling:
+
+Nullable Fields:
+- description: Optional metadata
+- start_time/end_time: Required for broadcast (not stored if not set)
+- rejection_reason: Only set if rejected
+- approved_by/approved_at: Only set if approved
+
+Content without start_time/end_time:
+- Eligible status: approved
+- Query result: excluded (time window filter)
+- Use case: Teachers can upload but not schedule yet
+
+7. FOLDER STRUCTURE & ORGANIZATION
+====================================================================
+
+src/
+├── controllers/        # HTTP request handlers
+│   ├── auth.controller.js          # Login, register handlers
+│   ├── content.controller.js       # Teacher upload/list
+│   ├── approval.controller.js      # Principal approve/reject
+│   └── broadcast.controller.js     # Public API endpoint
+│
+├── services/          # Business logic layer
+│   ├── auth.service.js             # JWT, password validation
+│   ├── content.service.js          # Content CRUD logic
+│   ├── upload.service.js           # File validation
+│   ├── approval.service.js         # Approval workflow
+│   └── scheduler.service.js        # Rotation calculation ⭐ CRITICAL
+│
+├── middlewares/       # Express middleware
+│   ├── auth.middleware.js          # JWT verification
+│   ├── rbac.middleware.js          # Role-based access control
+│   ├── upload.middleware.js        # Multer configuration
+│   └── validator.middleware.js     # Request validation
+│
+├── models/           # Database access layer
+│   ├── user.model.js
+│   └── content.model.js            # All content queries
+│
+├── routes/           # Route definitions
+│   ├── auth.routes.js
+│   ├── content.routes.js
+│   ├── approval.routes.js
+│   └── broadcast.routes.js
+│
+├── utils/            # Helper functions
+│   ├── db.js                       # PostgreSQL connection pool
+│   ├── logger.js                   # Winston logger
+│   ├── errors.js                   # Custom error classes
+│   └── test-scenarios.js           # Test documentation
+│
+├── config/
+│   └── index.js                    # Environment configuration
+│
+├── migrations/
+│   ├── 001_initial_schema.sql      # Database schema
+│   └── migrate.js                  # Migration runner
+│
+└── app.js                          # Express app setup + error handler
+
+Design Patterns:
+
+Separation of Concerns:
+- Controllers: HTTP handling only
+- Services: Business logic (can be reused)
+- Models: Database queries only
+- Middlewares: Cross-cutting concerns
+
+Single Responsibility:
+- Each file has one reason to change
+- Services don't handle HTTP (controllers do)
+- Models don't contain business logic (services do)
+
+DRY Principle:
+- Shared validation in validator middleware
+- Common error handling in global error handler
+- Reusable service methods
+
+Dependency Direction:
+- Controllers → Services → Models
+- Never circular dependencies
+- Easy to test in isolation
+
+8. MIDDLEWARE ARCHITECTURE
+====================================================================
+
+Request Pipeline:
+
+1. Global Middleware (app.js):
+   - express.json() - Parse JSON body
+   - express.urlencoded() - Parse form data
+   - Static file serving - /uploads endpoint
+   - Request logging - Log all requests
+
+2. Route-Specific Middleware (route files):
+   
+   For protected routes (require authentication):
+   a. authMiddleware.verifyToken
+      - Validates JWT token
+      - Attaches req.user with decoded payload
+      - Returns 401 if invalid
+   
+   b. rbacMiddleware.requireRole(['teacher'] / ['principal'])
+      - Checks req.user.role
+      - Returns 403 if not allowed
+   
+   c. uploadMiddleware.single('file') [for upload routes]
+      - Multer file handling
+      - Validation via fileFilter
+      - Stores file in /uploads
+      - Returns 400 if invalid
+   
+   d. validatorMiddleware.handleValidationErrors
+      - express-validator checks
+      - Returns 400 if validation fails
+
+   e. Controller handler
+      - Calls actual business logic
+
+3. Error Handler (bottom of app.js):
+   - Catches all errors from above
+   - Formats response based on error type
+   - Returns 5xx for unexpected errors
+
+Middleware Composition:
+
+Private endpoint example:
+POST /api/content/upload
+├─ authMiddleware.verifyToken (checks JWT)
+├─ rbacMiddleware.requireRole(['teacher']) (checks role)
+├─ uploadMiddleware.single('file') (handles file)
+├─ validatorMiddleware.validateContentUpload (validates body)
+└─ contentController.upload (business logic)
+
+Public endpoint example:
+GET /api/content/live/:teacherId
+└─ broadcastController.getLiveContent (no auth needed)
+
+9. SCALABILITY APPROACH
+====================================================================
+
+Current Implementation:
+- Connection pooling (pg library)
+- Database indexes on query-heavy columns
+- Stateless JWT authentication
+- Efficient database queries (no N+1)
+- Structured logging for debugging
+
+Future Scaling Opportunities:
+
+Horizontal Scaling:
+- Stateless design allows multiple instances
+- Load balance traffic across servers
+- Each instance uses same JWT secret
+- Database becomes central point (requires optimization)
+
+Database Optimization:
+- Already added strategic indexes
+- Query is O(n) where n = approved content for teacher
+- Could add database replication for read scaling
+- Connection pool prevents exhaustion
+
+Caching (if needed):
+- /api/content/live could be cached per teacher/minute
+- Cache invalidation on approval changes
+- Redis would work well for this
+
+Async Operations (if needed):
+- File processing could be queued (image optimization, etc.)
+- Approval notifications via background jobs
+- Content deletion with async cleanup
+
+Search & Analytics (future):
+- Subject-wise analytics: SELECT subject, COUNT(*) ...
+- Popular content tracking: track access counts
+- Search by title/teacher: full-text search
+
+10. ERROR HANDLING & VALIDATION
+====================================================================
+
+Custom Error Classes:
+
+AppError (base)
+├─ ValidationError (400)
+├─ UnauthorizedError (401)
+├─ ForbiddenError (403)
+└─ NotFoundError (404)
+
+Each extends Error with:
+- statusCode for HTTP response
+- isOperational flag for handling
+
+Validation Layers:
+
+1. Middleware validation (express-validator)
+   - Email format
+   - Password length
+   - Required fields
+   
+2. Service validation
+   - Business rules
+   - State constraints
+   - Cross-field validation
+
+3. Database constraints
+   - Unique indexes (email)
+   - Check constraints (role values)
+   - Foreign key integrity
+
+Error Response Format:
+{
+  "success": false,
+  "error": "Human-readable error message"
+}
+
+Status Code Mapping:
+- 400: Validation errors, bad input
+- 401: Missing/invalid authentication
+- 403: Insufficient permissions
+- 404: Resource not found
+- 500: Unexpected server error
+
+11. TESTING STRATEGY
+====================================================================
+
+See src/utils/test-scenarios.js for detailed test cases.
+
+Critical Paths to Test:
+
+Rotation Algorithm:
+1. Basic 2-item rotation with different durations
+2. Cycle wrapping (modulo behavior)
+3. Multiple subjects independently rotating
+4. Single item (no rotation)
+5. Rotation order enforcement
+
+Time Windows:
+1. Content before start_time (not active)
+2. Content at exact start_time (becomes active)
+3. Content after end_time (not active)
+4. Content without times (ineligible)
+
+RBAC:
+1. Teacher can upload, cannot approve
+2. Principal can approve, cannot upload
+3. Invalid token returns 401
+4. Valid token with wrong role returns 403
+
+File Upload:
+1. Valid image files (jpg, png, gif)
+2. Invalid format (pdf, doc, etc.)
+3. File size exceeds limit
+4. Missing required fields
+
+Edge Cases:
+1. Empty teacher ID (returns no content, not error)
+2. No approved content (returns empty, not error)
+3. Multiple approvals not allowed (service validates)
+4. Rejection without reason (returns 400)
+
+12. DEPLOYMENT CONSIDERATIONS
+====================================================================
+
+Environment Setup:
+- PostgreSQL database with migrations run
+- Node.js runtime (v14+)
+- npm packages installed
+- .env file with secrets
+
+Required Environment Variables:
+- DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+- JWT_SECRET (min 32 chars, should be random)
+- PORT (default 3000)
+- NODE_ENV (production/development)
+
+Pre-deployment Checklist:
+- [ ] Database migrations completed
+- [ ] .env file with production secrets
+- [ ] JWT_SECRET is cryptographically random
+- [ ] File upload directory writable
+- [ ] Error logging configured
+- [ ] Database backups scheduled
+- [ ] File cleanup strategy defined (optional)
+
+Health Check:
+- GET /health returns { status: 'ok' }
+- Useful for monitoring/load balancers
+
+Logging:
+- Structured logs with Winston
+- Log levels: error, info, debug
+- Can be extended to file/cloud logging
+
+Monitoring Recommendations:
+- Track error rates per endpoint
+- Monitor scheduler performance (rotation calculations)
+- Alert on failed approvals/uploads
+- Track file storage usage
+
+====================================================================
+END OF ARCHITECTURE NOTES
+====================================================================

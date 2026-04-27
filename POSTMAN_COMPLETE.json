@@ -1,0 +1,698 @@
+{
+  "info": {
+    "_postman_id": "broadcast-content-system-complete",
+    "name": "Broadcast Content System - Complete Testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Complete API testing collection with real-time rotation scenarios"
+  },
+  "item": [
+    {
+      "name": "SETUP - Health & Auth",
+      "item": [
+        {
+          "name": "1️⃣ Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verify server is running\n\nExpected: 200 OK with status: ok"
+          }
+        },
+        {
+          "name": "2️⃣ Register Teacher",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"teacher@school.com\",\n  \"password\": \"SecurePass123!\",\n  \"name\": \"Ms. Sarah Smith\",\n  \"role\": \"teacher\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register teacher account\n\nResponse includes: id (save as {{teacherId}})"
+          }
+        },
+        {
+          "name": "3️⃣ Register Principal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"principal@school.com\",\n  \"password\": \"SecurePass123!\",\n  \"name\": \"Mr. James Johnson\",\n  \"role\": \"principal\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register principal account"
+          }
+        },
+        {
+          "name": "4️⃣ Teacher Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"teacher@school.com\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login as teacher\n\nResponse includes: token (save as {{authToken}})"
+          }
+        },
+        {
+          "name": "5️⃣ Principal Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"principal@school.com\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login as principal\n\nResponse includes: token (save as {{principalToken}})"
+          }
+        }
+      ]
+    },
+    {
+      "name": "TEACHER - Upload Content (Rotation Test)",
+      "item": [
+        {
+          "name": "6️⃣ Upload: Maths Content A (5 min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "title",
+                  "value": "Calculus Basics - Derivatives"
+                },
+                {
+                  "key": "subject",
+                  "value": "maths"
+                },
+                {
+                  "key": "description",
+                  "value": "Introduction to derivative concepts and rules"
+                },
+                {
+                  "key": "startTime",
+                  "value": "2026-04-27T00:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2026-04-27T23:59:59Z"
+                },
+                {
+                  "key": "rotationOrder",
+                  "value": "0"
+                },
+                {
+                  "key": "rotationDuration",
+                  "value": "5"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "upload"]
+            },
+            "description": "Upload first maths content\n\nSAVE RESPONSE ID as {{contentId1}}\n\nRotation Order: 0 (shows first)\nDuration: 5 minutes"
+          }
+        },
+        {
+          "name": "7️⃣ Upload: Maths Content B (3 min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "title",
+                  "value": "Calculus Advanced - Chain Rule"
+                },
+                {
+                  "key": "subject",
+                  "value": "maths"
+                },
+                {
+                  "key": "description",
+                  "value": "Complex derivative calculations using chain rule"
+                },
+                {
+                  "key": "startTime",
+                  "value": "2026-04-27T00:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2026-04-27T23:59:59Z"
+                },
+                {
+                  "key": "rotationOrder",
+                  "value": "1"
+                },
+                {
+                  "key": "rotationDuration",
+                  "value": "3"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "upload"]
+            },
+            "description": "Upload second maths content\n\nSAVE RESPONSE ID as {{contentId2}}\n\nRotation Order: 1 (shows second)\nDuration: 3 minutes\n\nMATHS CYCLE: 5 + 3 = 8 minutes total"
+          }
+        },
+        {
+          "name": "8️⃣ Upload: Science Content (4 min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "title",
+                  "value": "Physics - Newton's Laws of Motion"
+                },
+                {
+                  "key": "subject",
+                  "value": "science"
+                },
+                {
+                  "key": "description",
+                  "value": "Understanding forces, acceleration, and motion"
+                },
+                {
+                  "key": "startTime",
+                  "value": "2026-04-27T00:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2026-04-27T23:59:59Z"
+                },
+                {
+                  "key": "rotationOrder",
+                  "value": "0"
+                },
+                {
+                  "key": "rotationDuration",
+                  "value": "4"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "upload"]
+            },
+            "description": "Upload science content (DIFFERENT SUBJECT)\n\nSAVE RESPONSE ID as {{contentId3}}\n\nDuration: 4 minutes\n\nIMPORTANT: Science rotates INDEPENDENTLY from Maths!"
+          }
+        },
+        {
+          "name": "9️⃣ View My Uploaded Content",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/content/my-content",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "my-content"]
+            },
+            "description": "View all content uploaded by this teacher\n\nStatus: All should be 'pending'"
+          }
+        }
+      ]
+    },
+    {
+      "name": "PRINCIPAL - Approval Workflow",
+      "item": [
+        {
+          "name": "🔟 View Pending Content",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{principalToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/approval/pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "approval", "pending"]
+            },
+            "description": "Principal views all pending content waiting approval\n\nShould show 3 items (all pending)"
+          }
+        },
+        {
+          "name": "1️⃣1️⃣ Approve: Maths Content A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{principalToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/approval/approve/{{contentId1}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "approval", "approve", "{{contentId1}}"]
+            },
+            "description": "Principal approves first maths content\n\nResponse status changes to: 'approved'"
+          }
+        },
+        {
+          "name": "1️⃣2️⃣ Approve: Maths Content B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{principalToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/approval/approve/{{contentId2}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "approval", "approve", "{{contentId2}}"]
+            },
+            "description": "Principal approves second maths content"
+          }
+        },
+        {
+          "name": "1️⃣3️⃣ Approve: Science Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{principalToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/approval/approve/{{contentId3}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "approval", "approve", "{{contentId3}}"]
+            },
+            "description": "Principal approves science content"
+          }
+        },
+        {
+          "name": "1️⃣4️⃣ View All Content",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{principalToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/approval/all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "approval", "all"]
+            },
+            "description": "View all content from all teachers\n\nAll 3 should now show status: 'approved'"
+          }
+        }
+      ]
+    },
+    {
+      "name": "PUBLIC API - ROTATION (No Auth Required)",
+      "item": [
+        {
+          "name": "🔄 ROTATION TEST 1: Initial State (Time 0:00)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/content/live/{{teacherId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "live", "{{teacherId}}"]
+            },
+            "description": "PUBLIC ENDPOINT - No authentication required!\n\nExpected Response:\n- 2 items (Maths A + Science)\n- Maths A: activeUntilMinutes ≈ 5\n- Science: activeUntilMinutes ≈ 4\n\nWhy Maths B not shown? Because rotation is 0-5 min, B shows at 5-8 min"
+          }
+        },
+        {
+          "name": "🔄 ROTATION TEST 2: After 6 seconds (Time 0:06)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/content/live/{{teacherId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "live", "{{teacherId}}"]
+            },
+            "description": "WAIT 6 SECONDS, THEN CALL THIS\n\nExpected Response:\n- Maths B should now be active (not A!)\n- Why? 0:00-0:05 = A, 0:05-0:08 = B, so at 0:06 → B\n- Maths B: activeUntilMinutes ≈ 2\n- Science still showing (independent rotation)\n\n✅ THIS PROVES ROTATION WORKS"
+          }
+        },
+        {
+          "name": "🔄 ROTATION TEST 3: After 10 seconds Total (Time 0:10)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/content/live/{{teacherId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "live", "{{teacherId}}"]
+            },
+            "description": "WAIT ANOTHER 4 SECONDS FROM TEST 2 (Total 10 sec)\n\nExpected Response:\n- Maths A returns (cycle repeats!)\n- Why? Cycle = 8 min, at 0:10 → 0:10 % 0:08 = 0:02 → A active\n- Maths A: activeUntilMinutes ≈ 3\n\n✅ THIS PROVES LOOPING WORKS"
+          }
+        },
+        {
+          "name": "🔄 ROTATION TEST 4: After 15 seconds Total (Time 0:15)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/content/live/{{teacherId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "live", "{{teacherId}}"]
+            },
+            "description": "WAIT ANOTHER 5 SECONDS FROM TEST 3 (Total 15 sec)\n\nExpected Response:\n- Maths B again\n- Why? 0:15 % 0:08 = 0:07 → B range [0:05-0:08]\n\n✅ CONFIRMS CONSISTENT ROTATION"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ERROR TESTING - RBAC & Validation",
+      "item": [
+        {
+          "name": "❌ RBAC Test 1: Teacher Tries to Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/approval/approve/{{contentId1}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "approval", "approve", "{{contentId1}}"]
+            },
+            "description": "Expected: 403 Forbidden\nError: \"This action requires one of these roles: principal\""
+          }
+        },
+        {
+          "name": "❌ RBAC Test 2: Principal Tries to Upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{principalToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "title",
+                  "value": "Test"
+                },
+                {
+                  "key": "subject",
+                  "value": "maths"
+                },
+                {
+                  "key": "startTime",
+                  "value": "2026-04-27T00:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2026-04-27T23:59:59Z"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "upload"]
+            },
+            "description": "Expected: 403 Forbidden\nError: \"This action requires one of these roles: teacher\""
+          }
+        },
+        {
+          "name": "❌ Validation Test: Missing Title",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "subject",
+                  "value": "maths"
+                },
+                {
+                  "key": "startTime",
+                  "value": "2026-04-27T00:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2026-04-27T23:59:59Z"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "upload"]
+            },
+            "description": "Expected: 400 Bad Request\nError: \"Title is required\""
+          }
+        },
+        {
+          "name": "❌ Validation Test: Invalid File Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "title",
+                  "value": "Test PDF"
+                },
+                {
+                  "key": "subject",
+                  "value": "maths"
+                },
+                {
+                  "key": "startTime",
+                  "value": "2026-04-27T00:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2026-04-27T23:59:59Z"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/content/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "upload"]
+            },
+            "description": "Upload a .pdf file instead of image\n\nExpected: 400 Bad Request\nError: \"Invalid file type. Allowed types: jpg, jpeg, png, gif\""
+          }
+        },
+        {
+          "name": "❌ Edge Case: No Content Available",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/content/live/invalid-teacher-id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "content", "live", "invalid-teacher-id"]
+            },
+            "description": "Call with teacher ID that has no content\n\nExpected: 200 OK (not 404!)\nResponse: { success: true, content: [], message: \"No content available\" }"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string",
+      "description": "Teacher JWT token - save from login response"
+    },
+    {
+      "key": "principalToken",
+      "value": "",
+      "type": "string",
+      "description": "Principal JWT token - save from login response"
+    },
+    {
+      "key": "teacherId",
+      "value": "",
+      "type": "string",
+      "description": "Teacher ID - save from register response"
+    },
+    {
+      "key": "contentId1",
+      "value": "",
+      "type": "string",
+      "description": "Maths Content A ID - save from first upload"
+    },
+    {
+      "key": "contentId2",
+      "value": "",
+      "type": "string",
+      "description": "Maths Content B ID - save from second upload"
+    },
+    {
+      "key": "contentId3",
+      "value": "",
+      "type": "string",
+      "description": "Science Content ID - save from third upload"
+    }
+  ]
+}
