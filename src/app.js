@@ -3,14 +3,23 @@ const path = require('path');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { AppError } = require('./utils/errors');
+const { initializeRedis } = require('./services/cache.service');
+const { initializeS3 } = require('./services/s3.service');
 
 // Route imports
 const authRoutes = require('./routes/auth.routes');
 const contentRoutes = require('./routes/content.routes');
 const approvalRoutes = require('./routes/approval.routes');
 const broadcastRoutes = require('./routes/broadcast.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
 
 const app = express();
+
+// Initialize bonus services
+(async () => {
+  await initializeRedis();
+  initializeS3();
+})();
 
 // Middleware
 app.use(express.json());
@@ -35,6 +44,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/approval', approvalRoutes);
 app.use('/api/content', broadcastRoutes);
+app.use('/api/analytics', analyticsRoutes); // BONUS 4: Analytics
 
 // 404 Handler
 app.use((req, res) => {

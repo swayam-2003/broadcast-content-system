@@ -57,3 +57,19 @@ CREATE TRIGGER update_content_updated_at
 BEFORE UPDATE ON content
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+-- Analytics Table
+CREATE TABLE IF NOT EXISTS content_analytics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_id UUID NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subject VARCHAR(100) NOT NULL,
+  access_count INTEGER DEFAULT 0,
+  last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(content_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_analytics_subject ON content_analytics(subject);
+CREATE INDEX IF NOT EXISTS idx_analytics_teacher ON content_analytics(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_accessed ON content_analytics(last_accessed);

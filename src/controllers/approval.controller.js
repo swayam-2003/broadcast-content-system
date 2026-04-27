@@ -1,15 +1,25 @@
 const approvalService = require('../services/approval.service');
+const contentModel = require('../models/content.model');
 const { ValidationError } = require('../utils/errors');
 const logger = require('../utils/logger');
 
 class ApprovalController {
   async getPending(req, res, next) {
     try {
-      const content = await approvalService.getPendingContent();
+      const { page = 1, limit = 10, subject, status = 'pending' } = req.query;
+
+      const filters = { status };
+      if (subject) filters.subject = subject;
+
+      const result = await contentModel.findWithFilters(
+        filters,
+        parseInt(page),
+        parseInt(limit)
+      );
+
       res.json({
         success: true,
-        count: content.length,
-        content,
+        ...result,
       });
     } catch (err) {
       next(err);
@@ -18,11 +28,22 @@ class ApprovalController {
 
   async getAll(req, res, next) {
     try {
-      const content = await approvalService.getAllContent();
+      const { page = 1, limit = 10, subject, status, teacher } = req.query;
+
+      const filters = {};
+      if (subject) filters.subject = subject;
+      if (status) filters.status = status;
+      if (teacher) filters.teacher = teacher;
+
+      const result = await contentModel.findWithFilters(
+        filters,
+        parseInt(page),
+        parseInt(limit)
+      );
+
       res.json({
         success: true,
-        count: content.length,
-        content,
+        ...result,
       });
     } catch (err) {
       next(err);

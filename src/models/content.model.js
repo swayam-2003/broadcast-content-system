@@ -106,6 +106,71 @@ class ContentModel {
     );
     return result.rows[0] || null;
   }
+
+  async findWithFilters(filters = {}, page = 1, limit = 10) {
+    const { subject, teacher, status } = filters;
+    let sqlQuery = 'SELECT * FROM content WHERE 1=1';
+    const params = [];
+    let paramCount = 1;
+
+    if (subject) {
+      sqlQuery += ` AND subject = $${paramCount}`;
+      params.push(subject);
+      paramCount++;
+    }
+
+    if (teacher) {
+      sqlQuery += ` AND uploaded_by = $${paramCount}`;
+      params.push(teacher);
+      paramCount++;
+    }
+
+    if (status) {
+      sqlQuery += ` AND status = $${paramCount}`;
+      params.push(status);
+      paramCount++;
+    }
+
+    // Add pagination
+    sqlQuery += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+    params.push(limit, (page - 1) * limit);
+
+    const result = await query(sqlQuery, params);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) as total FROM content WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 1;
+
+    if (subject) {
+      countQuery += ` AND subject = $${countParamCount}`;
+      countParams.push(subject);
+      countParamCount++;
+    }
+
+    if (teacher) {
+      countQuery += ` AND uploaded_by = $${countParamCount}`;
+      countParams.push(teacher);
+      countParamCount++;
+    }
+
+    if (status) {
+      countQuery += ` AND status = $${countParamCount}`;
+      countParams.push(status);
+      countParamCount++;
+    }
+
+    const countResult = await query(countQuery, countParams);
+    const total = parseInt(countResult.rows[0].total);
+
+    return {
+      items: result.rows,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    };
+  }
 }
 
 module.exports = new ContentModel();
